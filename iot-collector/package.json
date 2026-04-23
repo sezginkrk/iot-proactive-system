@@ -1,0 +1,19 @@
+{
+  "name": "iot-collector",
+  "version": "1.0.0",
+  "description": "IoT MQTT veri toplayıcı — tüm tenant'ların verilerini TimescaleDB'ye yazar",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.4.1",
+    "mqtt": "^5.3.4",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}

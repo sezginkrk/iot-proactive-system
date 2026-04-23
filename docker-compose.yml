@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+
+  # ── TimescaleDB ──────────────────────────────────────────────────────
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: iot-timescaledb
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB:       iot_db
+      POSTGRES_USER:     iot_user
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./timescaledb/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iot_user -d iot_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── IoT Collector ────────────────────────────────────────────────────
+  iot-collector:
+    build: ./iot-collector
+    container_name: iot-collector
+    restart: always
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      TIMESCALE_URL:        postgresql://iot_user:${TIMESCALE_PASSWORD}@timescaledb:5432/iot_db
+      TIMESCALE_SSL:        "false"
+      SUPABASE_URL:         ${SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+
+  # ── IoT Analyzer ─────────────────────────────────────────────────────
+  iot-analyzer:
+    build: ./iot-analyzer
+    container_name: iot-analyzer
+    restart: always
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      TIMESCALE_URL:             postgresql://iot_user:${TIMESCALE_PASSWORD}@timescaledb:5432/iot_db
+      TIMESCALE_SSL:             "false"
+      ANYTHINGLLM_URL:           ${ANYTHINGLLM_URL}
+      ANYTHINGLLM_API_KEY:       ${ANYTHINGLLM_API_KEY}
+      ANYTHINGLLM_WORKSPACE:     karavantekne
+      NOTIFICATION_SERVICE_URL:  http://notification-service:3001
+
+  # ── Notification Service ─────────────────────────────────────────────
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    restart: always
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    environment:
+      PORT:                     3001
+      TIMESCALE_URL:            postgresql://iot_user:${TIMESCALE_PASSWORD}@timescaledb:5432/iot_db
+      TIMESCALE_SSL:            "false"
+      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT}
+      APNS_KEY_P8:              ${APNS_KEY_P8}
+      APNS_KEY_ID:              ${APNS_KEY_ID}
+      APNS_TEAM_ID:             ${APNS_TEAM_ID}
+      APNS_BUNDLE_ID:           ${APNS_BUNDLE_ID}
+      APNS_PRODUCTION:          "false"
+
+volumes:
+  timescale_data:

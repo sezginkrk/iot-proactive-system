@@ -4,6 +4,13 @@ const ANYTHINGLLM_URL   = process.env.ANYTHINGLLM_URL;
 const WORKSPACE_SLUG    = process.env.ANYTHINGLLM_WORKSPACE || 'karavantekne';
 const API_KEY           = process.env.ANYTHINGLLM_API_KEY;
 
+const MAX_ATTEMPTS  = 3;
+const RETRY_DELAY_MS = 5000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Son 24 saatin saatlik özetini AnythingLLM'e gönderir,
  * proaktif bakım/uyarı önerisi alır.
@@ -33,35 +40,42 @@ async function deepAnalysis(userId, hourlyData) {
     `3. Enerji veya su tüketiminde dikkat çeken bir durum var mı?\n\n` +
     `Yanıtını 3-4 cümleyi geçmeyecek şekilde ver.`;
 
-  try {
-    const response = await fetch(
-      `${ANYTHINGLLM_URL}/api/v1/workspace/${WORKSPACE_SLUG}/chat`,
-      {
-        method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
-        },
-        body: JSON.stringify({
-          message:   prompt,
-          mode:      'chat',
-          sessionId: `proactive_daily_${userId}`,
-        }),
-        timeout: 30000,
-      }
-    );
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch(
+        `${ANYTHINGLLM_URL}/api/v1/workspace/${WORKSPACE_SLUG}/chat`,
+        {
+          method:  'POST',
+          headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${API_KEY}`,
+          },
+          body: JSON.stringify({
+            message:   prompt,
+            mode:      'chat',
+            sessionId: `proactive_daily_${userId}`,
+          }),
+          timeout: 30000,
+        }
+      );
 
-    if (!response.ok) {
-      console.error(`❌ LLM API hatası: HTTP ${response.status}`);
-      return null;
+      if (!response.ok) {
+        console.error(`❌ LLM API hatası (deneme ${attempt}/${MAX_ATTEMPTS}): HTTP ${response.status}`);
+      } else {
+        const data = await response.json();
+        return data.textResponse || null;
+      }
+    } catch (err) {
+      console.error(`❌ LLM bağlantı hatası (deneme ${attempt}/${MAX_ATTEMPTS}):`, err.message);
     }
 
-    const data = await response.json();
-    return data.textResponse || null;
-  } catch (err) {
-    console.error('❌ LLM bağlantı hatası:', err.message);
-    return null;
+    if (attempt < MAX_ATTEMPTS) {
+      await sleep(RETRY_DELAY_MS);
+    }
   }
+
+  console.error(`❌ LLM analizi ${MAX_ATTEMPTS} denemeden sonra başarısız oldu`);
+  return null;
 }
 
 function buildSummary(hourlyData) {

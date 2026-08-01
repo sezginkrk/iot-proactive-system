@@ -68,7 +68,7 @@ WITH NO DATA;
 
 -- Continuous aggregate otomatik yenileme politikası
 SELECT add_continuous_aggregate_policy('sensor_hourly',
-    start_offset      => INTERVAL '2 hours',
+    start_offset      => INTERVAL '3 hours',
     end_offset        => INTERVAL '5 minutes',
     schedule_interval => INTERVAL '5 minutes',
     if_not_exists     => TRUE

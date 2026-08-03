@@ -11,20 +11,51 @@ const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http:/
 async function analyzeAllTenants() {
   console.log('🔍 Analiz başladı...');
 
-  // Son 10 dakikada veri gelen tenant'ların en son okumasını al
+  // Her tenant için her sensör alanının en son DOLU (NULL olmayan) değerini ayrı ayrı al.
+  // Her MQTT mesajı sensor_logs'a ayrı bir satır olarak yazılıyor (diğer alanlar o satırda NULL) —
+  // tek bir "en son satırı" almak, o an hangi topic'ten mesaj geldiyse sadece onu görürdü.
   const { rows: latestReadings } = await db.query(`
-    SELECT DISTINCT ON (user_id)
-      user_id,
-      time,
-      temperature,
-      humidity,
-      battery,
-      clean_water,
-      grey_water,
-      EXTRACT(EPOCH FROM (NOW() - time)) / 60 AS minutes_since
-    FROM sensor_logs
-    WHERE time > NOW() - INTERVAL '30 minutes'
-    ORDER BY user_id, time DESC
+    SELECT
+      t.user_id,
+      latest.time,
+      temp.temperature,
+      hum.humidity,
+      bat.battery,
+      cw.clean_water,
+      gw.grey_water,
+      EXTRACT(EPOCH FROM (NOW() - latest.time)) / 60 AS minutes_since
+    FROM tenants t
+    JOIN LATERAL (
+      SELECT time FROM sensor_logs sl
+      WHERE sl.user_id = t.user_id AND sl.time > NOW() - INTERVAL '30 minutes'
+      ORDER BY sl.time DESC LIMIT 1
+    ) latest ON true
+    LEFT JOIN LATERAL (
+      SELECT temperature FROM sensor_logs sl
+      WHERE sl.user_id = t.user_id AND sl.temperature IS NOT NULL AND sl.time > NOW() - INTERVAL '30 minutes'
+      ORDER BY sl.time DESC LIMIT 1
+    ) temp ON true
+    LEFT JOIN LATERAL (
+      SELECT humidity FROM sensor_logs sl
+      WHERE sl.user_id = t.user_id AND sl.humidity IS NOT NULL AND sl.time > NOW() - INTERVAL '30 minutes'
+      ORDER BY sl.time DESC LIMIT 1
+    ) hum ON true
+    LEFT JOIN LATERAL (
+      SELECT battery FROM sensor_logs sl
+      WHERE sl.user_id = t.user_id AND sl.battery IS NOT NULL AND sl.time > NOW() - INTERVAL '30 minutes'
+      ORDER BY sl.time DESC LIMIT 1
+    ) bat ON true
+    LEFT JOIN LATERAL (
+      SELECT clean_water FROM sensor_logs sl
+      WHERE sl.user_id = t.user_id AND sl.clean_water IS NOT NULL AND sl.time > NOW() - INTERVAL '30 minutes'
+      ORDER BY sl.time DESC LIMIT 1
+    ) cw ON true
+    LEFT JOIN LATERAL (
+      SELECT grey_water FROM sensor_logs sl
+      WHERE sl.user_id = t.user_id AND sl.grey_water IS NOT NULL AND sl.time > NOW() - INTERVAL '30 minutes'
+      ORDER BY sl.time DESC LIMIT 1
+    ) gw ON true
+    WHERE t.is_active = true
   `);
 
   // Tüm aktif tenant'ların bildirim ayarlarını çek

@@ -40,15 +40,19 @@ function shouldSend(severity, filters, alertType) {
   return { send: true, reason: null };
 }
 
+// Sunucu UTC'de çalışıyor; kullanıcı saatleri Türkiye saatiyle (UTC+3, DST yok) giriyor.
+const TR_OFFSET_MINUTES = 180;
+
 function isQuietHour(startStr, endStr) {
   const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const currentMinutes = (utcMinutes + TR_OFFSET_MINUTES) % 1440;
 
   const [startH, startM] = startStr.split(':').map(Number);
   const [endH, endM]     = endStr.split(':').map(Number);
 
-  const startMinutes = startH * 60 + startM;
-  const endMinutes   = endH   * 60 + endM;
+  const startMinutes = (startH * 60 + startM) % 1440;
+  const endMinutes   = (endH   * 60 + endM) % 1440;
 
   // Gece yarısını geçen aralık (örn: 23:00 - 07:00)
   if (startMinutes > endMinutes) {

@@ -2,10 +2,11 @@
  * Bildirim Filtresi
  * Gelen alert'in gönderilip gönderilmeyeceğine karar verir.
  *
- * Kural:
- *   critical  → her zaman gönderilir (sessiz saat, toggle görmezden gelinir)
- *   warning   → notifications_enabled + notify_warning + quiet_hours kontrolü
- *   info      → notifications_enabled + notify_info + quiet_hours kontrolü
+ * Kural (critical ve warning tamamen simetrik):
+ *   critical  → notify_critical + quiet_hours kontrolü
+ *   warning   → notify_warning + quiet_hours kontrolü
+ * Sessiz saat ikisi için de geçerli — kullanıcı isterse kritik uyarıları da
+ * susturabilir, bu bilinçli bir tercih.
  */
 
 function shouldSend(severity, filters, alertType) {
@@ -14,23 +15,15 @@ function shouldSend(severity, filters, alertType) {
     return { send: false, reason: 'daily_report_in_app_only' };
   }
 
-  // Critical her zaman gönderilir
-  if (severity === 'critical') return { send: true, reason: null };
-
-  // Ana toggle kapalıysa
-  if (!filters.notificationsEnabled) {
-    return { send: false, reason: 'notifications_disabled' };
-  }
-
   // Severity bazlı filtre
+  if (severity === 'critical' && !filters.notifyCritical) {
+    return { send: false, reason: 'notify_critical_disabled' };
+  }
   if (severity === 'warning' && !filters.notifyWarning) {
     return { send: false, reason: 'notify_warning_disabled' };
   }
-  if (severity === 'info' && !filters.notifyInfo) {
-    return { send: false, reason: 'notify_info_disabled' };
-  }
 
-  // Sessiz saat kontrolü
+  // Sessiz saat kontrolü (critical dahil)
   if (filters.quietHoursStart && filters.quietHoursEnd) {
     if (isQuietHour(filters.quietHoursStart, filters.quietHoursEnd)) {
       return { send: false, reason: 'quiet_hours' };

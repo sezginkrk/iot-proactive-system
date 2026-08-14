@@ -59,12 +59,13 @@ async function analyzeAllTenants() {
   `);
 
   // Tüm aktif tenant'ların bildirim ayarlarını çek
+  // (gönderilip gönderilmeyeceği notify_critical/notify_warning + sessiz saatle
+  // notification-service'teki filter.js'de belirleniyor, burada önceden eleme yapmıyoruz)
   const { rows: allSettings } = await db.query(`
     SELECT ns.*, t.username
     FROM notification_settings ns
     JOIN tenants t ON t.user_id = ns.user_id
     WHERE t.is_active = true
-      AND ns.notifications_enabled = true
   `);
 
   const settingsMap = new Map(allSettings.map((s) => [s.user_id, s]));
@@ -144,7 +145,7 @@ async function processAlert(userId, alert, sensorData, settings) {
   const alertId = rows[0].id;
 
   // Bildirim filtresi kontrolü notification-service'e bırakılıyor
-  // (notify_warning, notify_info, quiet_hours kontrolleri orada)
+  // (notify_critical, notify_warning, quiet_hours kontrolleri orada)
   const notificationPayload = {
     alertId,
     userId,
@@ -154,11 +155,10 @@ async function processAlert(userId, alert, sensorData, settings) {
     expoPushToken: settings.expo_push_token,
     platform:      settings.platform,
     filters: {
-      notificationsEnabled: settings.notifications_enabled,
-      notifyWarning:        settings.notify_warning,
-      notifyInfo:           settings.notify_info,
-      quietHoursStart:      settings.quiet_hours_start,
-      quietHoursEnd:        settings.quiet_hours_end,
+      notifyCritical:  settings.notify_critical,
+      notifyWarning:   settings.notify_warning,
+      quietHoursStart: settings.quiet_hours_start,
+      quietHoursEnd:   settings.quiet_hours_end,
     },
   };
 

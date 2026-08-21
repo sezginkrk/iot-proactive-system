@@ -51,6 +51,22 @@ cron.schedule('0 8 * * *', async () => {
   }
 });
 
+// ── Her gün 04:00'te: 30 günden eski günlük özetleri temizle ──────────
+// (sunucu şişmesin diye; sadece daily_ai_report tipi siliniyor, alert
+// geçmişi/kural uyarıları etkilenmiyor)
+cron.schedule('0 4 * * *', async () => {
+  try {
+    const result = await db.query(
+      `DELETE FROM alert_logs
+       WHERE alert_type = 'daily_ai_report'
+         AND created_at < NOW() - INTERVAL '30 days'`
+    );
+    console.log(`🧹 ${result.rowCount} eski günlük özet silindi`);
+  } catch (err) {
+    console.error('❌ Günlük özet temizleme hatası:', err.message);
+  }
+});
+
 // ── Başlangıçta bir kez çalıştır ─────────────────────────────────────
 (async () => {
   try {

@@ -18,6 +18,9 @@ async function start() {
 
   console.log(`✅ ${manager.getConnectedCount()} tenant bağlandı`);
 
+  // Hayalet bağlantı koruması: 10 dk mesajsız kalan tenant'ları yeniden bağla
+  manager.startWatchdog(10, 5 * 60 * 1000);
+
   // Supabase Realtime: yeni tenant eklenince otomatik bağlan
   supabase
     .channel('mqtt_configs_changes')

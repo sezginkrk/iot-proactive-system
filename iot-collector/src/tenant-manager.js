@@ -54,7 +54,13 @@ class TenantMQTTManager {
     });
 
     client.on('message', async (topic, message) => {
+      const entry = this.clients.get(userId);
+      if (entry) entry.lastMessageAt = Date.now();
+
       const payloadStr = message.toString();
+      console.log(
+        `📩 MQTT mesaj | user=${userId} | topic=${topic} | payload=${payloadStr.slice(0, 200)}`
+      );
       const parsed = parsePayload(topic, payloadStr, tenant.sensor_configs);
 
       await this._saveReading(userId, topic, payloadStr, parsed);
@@ -72,7 +78,34 @@ class TenantMQTTManager {
       console.log(`🔌 Bağlantı kapandı: ${tenant.users?.username || userId}`);
     });
 
-    this.clients.set(userId, { client, config: tenant });
+    this.clients.set(userId, { client, config: tenant, lastMessageAt: Date.now() });
+  }
+
+  /**
+   * "Hayalet bağlantı" koruması: mqtt.js bazen WebSocket bağlantısının
+   * koptuğunu fark etmiyor (offline/close/error hiç tetiklenmiyor) ama
+   * mesaj da gelmiyor. Belirli bir süredir mesaj almayan tenant'ları
+   * tespit edip bağlantısını zorla yeniden kurar.
+   * @param {number} staleMinutes - bu kadar dakikadır mesaj gelmeyen bağlantı "hayalet" sayılır
+   * @param {number} checkIntervalMs - kontrol sıklığı
+   */
+  startWatchdog(staleMinutes = 10, checkIntervalMs = 5 * 60 * 1000) {
+    setInterval(() => {
+      const staleMs = staleMinutes * 60 * 1000;
+      for (const [userId, entry] of this.clients.entries()) {
+        const silentFor = Date.now() - entry.lastMessageAt;
+        if (silentFor > staleMs) {
+          const username = entry.config.users?.username || userId;
+          console.log(
+            `🧟 Hayalet bağlantı tespit edildi (${username}) — ${Math.round(silentFor / 60000)} dk sessiz, yeniden bağlanılıyor...`
+          );
+          const config = entry.config;
+          entry.client.end(true);
+          this.clients.delete(userId);
+          this.connectTenant(config);
+        }
+      }
+    }, checkIntervalMs);
   }
 
   disconnectTenant(userId) {
